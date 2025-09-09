@@ -1,0 +1,11 @@
+import { Router } from "express";
+import { auth } from "../middleware/auth.js";
+import { acceptRide, getLive, getRide, pushLocation, requestRide, updateStatus } from "../controllers/rides.controller.js";
+const r = Router();
+r.post("/request", auth(["customer","admin"]), requestRide);
+r.post("/:rideId/accept", auth(["captain","admin"]), acceptRide);
+r.patch("/:rideId/status", auth(["captain","admin"]), updateStatus);
+r.get("/:rideId", auth(), getRide);
+r.get("/:rideId/live", auth(), getLive);
+r.post("/:rideId/location", auth(["captain","admin"]), pushLocation);
+export default r;

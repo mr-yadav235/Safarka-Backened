@@ -1,0 +1,125 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model users {
+  user_id      Int      @id @default(autoincrement())
+  name         String
+  phone_number String   @unique
+  email        String   @unique
+  password_hash String
+  role         String   // "customer" | "admin"
+  created_at   DateTime @default(now())
+  updated_at   DateTime @default(now()) @updatedAt
+
+  // Relations
+  rides_customer rides[] @relation("rides_customer")
+  payments       payments[]
+  transactions   transactions_log[]
+  support_tickets support_tickets[]
+  wallet         Wallet?
+}
+
+model rides {
+  ride_id     Int    @id @default(autoincrement())
+  pickup      String
+  dropoff     String
+  status      String @default("requested") // "requested" | "accepted" | "ongoing" | "completed" | "cancelled"
+  fare        Float  @default(0)
+  createdAt   DateTime @default(now())
+  started_at  DateTime?
+  ended_at    DateTime?
+
+  // Coordinates
+  pickup_lat  Float
+  pickup_lng  Float
+  drop_lat    Float
+  drop_lng    Float
+
+  // Foreign keys
+  customer_id Int
+  captain_id  Int?
+
+  // Relations
+  customer users    @relation("rides_customer", fields: [customer_id], references: [user_id])
+  captain  captains? @relation(fields: [captain_id], references: [captain_id])
+
+  support_tickets support_tickets[]
+  transactions    transactions_log[]
+}
+
+model captains {
+  captain_id     Int      @id @default(autoincrement())
+  name           String
+  phone_number   String   @unique
+  email          String   @unique
+  password_hash  String
+  vehicle_type   String
+  vehicle_number String
+  license_number String
+  current_status String   @default("available") // available | on_ride | offline
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  // Relations
+  rides  rides[]
+}
+
+model payments {
+  payment_id Int    @id @default(autoincrement())
+  amount     Float
+  status     String
+  method     String
+  createdAt  DateTime @default(now())
+
+  // Foreign key
+  user_id Int
+  user    users @relation(fields: [user_id], references: [user_id])
+}
+
+model support_tickets {
+  ticket_id Int    @id @default(autoincrement())
+  message   String
+  status    String // "open" | "closed"
+  createdAt DateTime @default(now())
+
+  // Foreign keys
+  user_id Int
+  ride_id Int?
+
+  // Relations
+  user users @relation(fields: [user_id], references: [user_id])
+  ride rides? @relation(fields: [ride_id], references: [ride_id])
+}
+
+model transactions_log {
+  transaction_id Int     @id @default(autoincrement())
+  amount         Float
+  status         String
+  createdAt      DateTime @default(now())
+
+  // Foreign keys
+  ride_id Int?
+  user_id Int?
+
+  // Relations
+  ride rides? @relation(fields: [ride_id], references: [ride_id])
+  user users? @relation(fields: [user_id], references: [user_id])
+}
+
+model Wallet {
+  wallet_id  Int     @id @default(autoincrement())
+  user_id    Int     @unique
+  balance    Float   @default(0)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user users @relation(fields: [user_id], references: [user_id])
+}

@@ -1,0 +1,217 @@
+openapi: 3.0.3
+info:
+  title: Rapido-like API
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000
+paths:
+  /auth/register:
+    post:
+      summary: Register user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                phone_number: { type: string }
+                email: { type: string }
+                password: { type: string }
+                role: { type: string, enum: [customer,captain,admin] }
+      responses:
+        '201': { description: Created }
+  /auth/login:
+    post:
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                phone_number: { type: string }
+                password: { type: string }
+      responses:
+        '200': { description: OK }
+  /captains/register:
+    post:
+      summary: Register captain details
+      responses:
+        '200': { description: OK }
+  /captains/{id}/status:
+    patch:
+      summary: Update captain status
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /captains/nearby:
+    get:
+      summary: Find nearby captains
+      parameters:
+        - in: query
+          name: lat
+          schema: { type: number }
+        - in: query
+          name: lng
+          schema: { type: number }
+        - in: query
+          name: radius
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /captains/{id}/heartbeat:
+    post:
+      summary: Captain geo heartbeat
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                lat: { type: number }
+                lng: { type: number }
+      responses:
+        '200': { description: OK }
+  /rides/request:
+    post:
+      summary: Request a ride
+      responses:
+        '200': { description: OK }
+  /rides/{rideId}/accept:
+    post:
+      summary: Accept a ride
+      parameters:
+        - in: path
+          name: rideId
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /rides/{rideId}/status:
+    patch:
+      summary: Update ride status
+      parameters:
+        - in: path
+          name: rideId
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /rides/{rideId}:
+    get:
+      summary: Ride details
+      parameters:
+        - in: path
+          name: rideId
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /rides/{rideId}/live:
+    get:
+      summary: Live captain location
+      parameters:
+        - in: path
+          name: rideId
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /rides/{rideId}/location:
+    post:
+      summary: Push ride tracking point
+      parameters:
+        - in: path
+          name: rideId
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /payments/initiate:
+    post:
+      summary: Initiate payment
+      responses:
+        '200': { description: OK }
+  /payments/confirm:
+    post:
+      summary: Confirm payment
+      responses:
+        '200': { description: OK }
+  /wallet/{userId}:
+    get:
+      summary: Get wallet
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /wallet/{userId}/topup:
+    post:
+      summary: Top up wallet
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /promotions:
+    get:
+      summary: List promos
+      responses:
+        '200': { description: OK }
+  /promotions/apply:
+    post:
+      summary: Apply promo to fare
+      responses:
+        '200': { description: OK }
+  /ratings/rides/{rideId}:
+    post:
+      summary: Give rating for a ride
+      parameters:
+        - in: path
+          name: rideId
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /ratings/users/{id}:
+    get:
+      summary: Get ratings received by user
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /support:
+    post:
+      summary: Create support ticket
+      responses:
+        '200': { description: OK }
+  /support/{ticketId}:
+    patch:
+      summary: Update support ticket status
+      parameters:
+        - in: path
+          name: ticketId
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
