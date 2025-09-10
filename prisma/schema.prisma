@@ -1,5 +1,3 @@
-// prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,54 +7,25 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model users {
-  user_id      Int      @id @default(autoincrement())
-  name         String
-  phone_number String   @unique
-  email        String   @unique
-  password_hash String
-  role         String   // "customer" | "admin"
-  created_at   DateTime @default(now())
-  updated_at   DateTime @default(now()) @updatedAt
+model User {
+  id             Int       @id @default(autoincrement())
+  name           String
+  phone_number   String    @unique
+  email          String    @unique
+  password_hash  String
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @default(now()) @updatedAt
 
   // Relations
-  rides_customer rides[] @relation("rides_customer")
-  payments       payments[]
-  transactions   transactions_log[]
-  support_tickets support_tickets[]
+  ridesAsCustomer Ride[]       @relation("CustomerRides")
+  payments       Payment[]
+  transactions   TransactionLog[]
+  support_tickets SupportTicket[]
   wallet         Wallet?
 }
 
-model rides {
-  ride_id     Int    @id @default(autoincrement())
-  pickup      String
-  dropoff     String
-  status      String @default("requested") // "requested" | "accepted" | "ongoing" | "completed" | "cancelled"
-  fare        Float  @default(0)
-  createdAt   DateTime @default(now())
-  started_at  DateTime?
-  ended_at    DateTime?
-
-  // Coordinates
-  pickup_lat  Float
-  pickup_lng  Float
-  drop_lat    Float
-  drop_lng    Float
-
-  // Foreign keys
-  customer_id Int
-  captain_id  Int?
-
-  // Relations
-  customer users    @relation("rides_customer", fields: [customer_id], references: [user_id])
-  captain  captains? @relation(fields: [captain_id], references: [captain_id])
-
-  support_tickets support_tickets[]
-  transactions    transactions_log[]
-}
-
-model captains {
-  captain_id     Int      @id @default(autoincrement())
+model Captain {
+  id             Int      @id @default(autoincrement())
   name           String
   phone_number   String   @unique
   email          String   @unique
@@ -66,60 +35,81 @@ model captains {
   license_number String
   current_status String   @default("available") // available | on_ride | offline
   created_at     DateTime @default(now())
-  updated_at     DateTime @updatedAt
+  updated_at     DateTime @default(now()) @updatedAt
 
   // Relations
-  rides  rides[]
+  rides Ride[]
 }
 
-model payments {
-  payment_id Int    @id @default(autoincrement())
-  amount     Float
-  status     String
-  method     String
-  createdAt  DateTime @default(now())
+model Ride {
+  id           Int       @id @default(autoincrement())
+  pickup       String
+  dropoff      String
+  status       String    @default("requested") // requested | accepted | ongoing | completed | cancelled
+  fare         Float     @default(0)
+  created_at   DateTime  @default(now())
+  started_at   DateTime?
+  ended_at     DateTime?
 
-  // Foreign key
-  user_id Int
-  user    users @relation(fields: [user_id], references: [user_id])
+  pickup_lat   Float
+  pickup_lng   Float
+  drop_lat     Float
+  drop_lng     Float
+
+  // Foreign keys
+  customer_id  Int
+  captain_id   Int?
+
+  // Relations
+  customer     User      @relation("CustomerRides", fields: [customer_id], references: [id])
+  captain      Captain?  @relation(fields: [captain_id], references: [id])
+  support_tickets SupportTicket[]
+  transactions   TransactionLog[]
 }
 
-model support_tickets {
-  ticket_id Int    @id @default(autoincrement())
+model Payment {
+  id        Int      @id @default(autoincrement())
+  amount    Float
+  status    String
+  method    String
+  created_at DateTime @default(now())
+
+  user_id   Int
+  user      User     @relation(fields: [user_id], references: [id])
+}
+
+model SupportTicket {
+  id        Int      @id @default(autoincrement())
   message   String
-  status    String // "open" | "closed"
-  createdAt DateTime @default(now())
+  status    String   // "open" | "closed"
+  created_at DateTime @default(now())
 
-  // Foreign keys
-  user_id Int
-  ride_id Int?
+  user_id   Int
+  ride_id   Int?
 
-  // Relations
-  user users @relation(fields: [user_id], references: [user_id])
-  ride rides? @relation(fields: [ride_id], references: [ride_id])
+  user      User      @relation(fields: [user_id], references: [id])
+  ride      Ride?     @relation(fields: [ride_id], references: [id])
 }
 
-model transactions_log {
-  transaction_id Int     @id @default(autoincrement())
-  amount         Float
-  status         String
-  createdAt      DateTime @default(now())
+model TransactionLog {
+  id        Int      @id @default(autoincrement())
+  amount    Float
+  status    String
+  created_at DateTime @default(now())
 
-  // Foreign keys
-  ride_id Int?
-  user_id Int?
+  ride_id   Int?
+  user_id   Int?
 
-  // Relations
-  ride rides? @relation(fields: [ride_id], references: [ride_id])
-  user users? @relation(fields: [user_id], references: [user_id])
+  ride      Ride?    @relation(fields: [ride_id], references: [id])
+  user      User?    @relation(fields: [user_id], references: [id])
 }
 
 model Wallet {
-  wallet_id  Int     @id @default(autoincrement())
-  user_id    Int     @unique
-  balance    Float   @default(0)
+  id        Int      @id @default(autoincrement())
+  user_id   Int      @unique
+  balance   Float    @default(0)
   created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  updated_at DateTime @default(now()) @updatedAt
 
-  user users @relation(fields: [user_id], references: [user_id])
+  user      User     @relation(fields: [user_id], references: [id])
 }

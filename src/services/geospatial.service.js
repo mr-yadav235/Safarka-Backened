@@ -1,22 +1,22 @@
 import { redis, GEO_KEY, LOC_KEY } from "../config/redis.js";
 
-export async function setCaptainAvailability(captainId, available) {
+export async function setCaptainAvailability(captain_id, available) {
   if (!available) {
     // remove from GEO set when offline
-    await redis.zrem(GEO_KEY, captainId.toString());
+    await redis.zrem(GEO_KEY, captain_id.toString());
   } else {
-    const raw = await redis.get(LOC_KEY(captainId));
+    const raw = await redis.get(LOC_KEY(captain_id));
     if (raw) {
       const { lat, lng } = JSON.parse(raw);
-      await redis.geoadd(GEO_KEY, lng, lat, captainId.toString());
+      await redis.geoadd(GEO_KEY, lng, lat, captain_id.toString());
     }
   }
 }
 
-export async function updateCaptainGeo(captainId, lng, lat) {
+export async function updateCaptainGeo(captain_id, lng, lat) {
   // GEOADD expects lon lat
-  await redis.geoadd(GEO_KEY, lng, lat, captainId.toString());
-  await redis.set(LOC_KEY(captainId), JSON.stringify({ lat, lng, timestamp: Date.now() }));
+  await redis.geoadd(GEO_KEY, lng, lat, captain_id.toString());
+  await redis.set(LOC_KEY(captain_id), JSON.stringify({ lat, lng, timestamp: Date.now() }));
 }
 
 export async function findNearbyCaptains(lng, lat, radiusMeters = 3000, count = 10) {
@@ -25,7 +25,7 @@ export async function findNearbyCaptains(lng, lat, radiusMeters = 3000, count = 
   return members.map((m) => parseInt(m, 10));
 }
 
-export async function getCaptainLiveLocation(captainId) {
-  const raw = await redis.get(LOC_KEY(captainId));
+export async function getCaptainLiveLocation(captain_id) {
+  const raw = await redis.get(LOC_KEY(captain_id));
   return raw ? JSON.parse(raw) : null;
 }

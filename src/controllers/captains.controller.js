@@ -14,7 +14,7 @@ export async function registerCaptain(req, res) {
 export async function updateStatus(req, res) {
   const id = Number(req.params.id);
   const { status } = req.body; // available | on_ride | offline
-  const cap = await prisma.captains.update({ where: { captain_id: id }, data: { current_status: status } });
+  const cap = await prisma.Captain.update({ where: { id: id }, data: { current_status: status } });
   await setCaptainAvailability(id, status === "available");
   return ok(res, cap);
 }
@@ -22,7 +22,10 @@ export async function updateStatus(req, res) {
 export async function nearby(req, res) {
   const { lat, lng, radius = 3000, count = 10 } = req.query;
   const ids = await findNearbyCaptains(Number(lng), Number(lat), Number(radius), Number(count));
-  const captains = await prisma.captains.findMany({ where: { captain_id: { in: ids } }, include: { user: { select: { name: true, phone_number: true } } } });
+  const captains = await prisma.Captain.findMany({ 
+    where: { id: { in: ids }, current_status: "available" },
+    select: { id: true, name: true, phone_number: true, vehicle_type: true, vehicle_number: true }
+  });
   return ok(res, captains);
 }
 
@@ -35,14 +38,14 @@ export async function heartbeat(req, res) {
 
 export async function goOnline(req, res) {
   const id = req.user.userId;
-  const cap = await prisma.captains.update({ where: { captain_id: id }, data: { current_status: "available" } });
+  const cap = await prisma.Captain.update({ where: { id: id }, data: { current_status: "available" } });
   await setCaptainAvailability(id, true);
   return ok(res, cap);
 }
 
 export async function goOffline(req, res) {
   const id = req.user.userId;
-  const cap = await prisma.captains.update({ where: { captain_id: id }, data: { current_status: "offline" } });
+  const cap = await prisma.Captain.update({ where: { id: id }, data: { current_status: "offline" } });
   await setCaptainAvailability(id, false);
   return ok(res, cap);
 }
@@ -59,32 +62,35 @@ export async function captainLogin(req, res) {
 }
 
 export async function myTrips(req, res) {
-  const captainId = req.user.userId;
+  const captain_id = req.user.userId;
   const page = Number(req.query.page ?? 1);
   const pageSize = Math.min(Number(req.query.pageSize ?? 20), 100);
   const skip = (page - 1) * pageSize;
   const [items, total] = await Promise.all([
-    prisma.rides.findMany({
-      where: { captain_id: captainId },
-      orderBy: { createdAt: "desc" },
+    prisma.Ride.findMany({
+      where: { captain_id: captain_id },
+      orderBy: { created_at: "desc" },
       skip,
-      take: pageSize
+      take: pageSize,
+      include: {
+        customer: { select: { id: true, name: true, phone_number: true } }
+      }
     }),
-    prisma.rides.count({ where: { captain_id: captainId } })
+    prisma.Ride.count({ where: { captain_id: captain_id } })
   ]);
   return ok(res, { page, pageSize, total, items });
 }
 
 export async function myEarnings(req, res) {
-  const captainId = req.user.userId;
+  const captain_id = req.user.userId;
   const { from, to } = req.query;
-  const where = { captain_id: captainId, status: "completed" };
+  const where = { captain_id: captain_id, status: "completed" };
   if (from || to) {
-    where.createdAt = {};
-    if (from) where.createdAt.gte = new Date(from);
-    if (to) where.createdAt.lte = new Date(to);
+    where.created_at = {};
+    if (from) where.created_at.gte = new Date(from);
+    if (to) where.created_at.lte = new Date(to);
   }
-  const agg = await prisma.rides.aggregate({
+  const agg = await prisma.Ride.aggregate({
     where,
     _sum: { fare: true },
     _count: { _all: true }
