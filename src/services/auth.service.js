@@ -43,7 +43,23 @@ export async function loginUser({ phone_number, password }) {
 }
 
 export async function loginCaptain({ phone_number, password }) {
-  const captain = await prisma.Captain.findUnique({ where: { phone_number } });
+  const captain = await prisma.captain.findUnique({ 
+    where: { phone_number },
+    include: {
+      current_vehicle: {
+        select: {
+          id: true,
+          vehicle_type: true,
+          make: true,
+          model: true,
+          year: true,
+          color: true,
+          plate_number: true,
+          capacity: true
+        }
+      }
+    }
+  });
   if (!captain) return null;
   const ok = await bcrypt.compare(password, captain.password_hash);
   if (!ok) return null;

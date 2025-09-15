@@ -5,3 +5,4 @@ export const redis = new Redis(url);
 // Keys used
 export const GEO_KEY = "captains:geo"; // GEOADD lon lat member
 export const LOC_KEY = (captain_id) => `captain:${captain_id}:location`; // JSON for live location
+export const AVAILABILITY_KEY = (captain_id) => `captain:${captain_id}:available`; // TTL-based availability

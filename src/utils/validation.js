@@ -19,9 +19,17 @@ export const captainRegisterSchema = Joi.object({
   phone_number: Joi.string().min(8).required(),
   email: Joi.string().email().optional(),
   password: Joi.string().min(6).required(),
-  vehicle_type: Joi.string().valid("bike", "auto", "car").required(),
-  vehicle_number: Joi.string().required(),
   license_number: Joi.string().required()
+});
+
+export const vehicleRegisterSchema = Joi.object({
+  vehicle_type: Joi.string().valid("car", "auto", "bike", "suv", "truck", "van").required(),
+  make: Joi.string().min(2).required(),
+  model: Joi.string().min(2).required(),
+  year: Joi.number().integer().min(1900).max(new Date().getFullYear() + 1).optional(),
+  color: Joi.string().min(2).required(),
+  plate_number: Joi.string().min(2).required(),
+  capacity: Joi.number().integer().min(1).max(20).default(4)
 });
 
 export const rideRequestSchema = Joi.object({
@@ -31,5 +39,6 @@ export const rideRequestSchema = Joi.object({
   drop_lat: Joi.number().required(),
   drop_lng: Joi.number().required(),
   pickup: Joi.string().required(),
-  dropoff: Joi.string().required()
+  dropoff: Joi.string().required(),
+  requested_vehicle_type: Joi.string().valid("car", "auto", "bike", "suv", "truck", "van").default("car")
 });

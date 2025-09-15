@@ -30,15 +30,16 @@ model Captain {
   phone_number   String   @unique
   email          String   @unique
   password_hash  String
-  vehicle_type   String
-  vehicle_number String
   license_number String
   current_status String   @default("available") // available | on_ride | offline
+  current_vehicle_id Int? // Foreign key to current active vehicle
   created_at     DateTime @default(now())
   updated_at     DateTime @default(now()) @updatedAt
 
   // Relations
   rides Ride[]
+  vehicles Vehicle[] // All vehicles owned by this captain
+  current_vehicle Vehicle? @relation("CurrentVehicle", fields: [current_vehicle_id], references: [id])
 }
 
 model Ride {
@@ -56,6 +57,10 @@ model Ride {
   drop_lat     Float
   drop_lng     Float
 
+  // Vehicle information
+  requested_vehicle_type String @default("car") // car | auto | bike | suv | truck | van
+  vehicle_id   Int? // Foreign key to Vehicle table
+
   // Foreign keys
   customer_id  Int
   captain_id   Int?
@@ -63,6 +68,7 @@ model Ride {
   // Relations
   customer     User      @relation("CustomerRides", fields: [customer_id], references: [id])
   captain      Captain?  @relation(fields: [captain_id], references: [id])
+  vehicle      Vehicle?  @relation(fields: [vehicle_id], references: [id])
   support_tickets SupportTicket[]
   transactions   TransactionLog[]
 }
@@ -102,6 +108,26 @@ model TransactionLog {
 
   ride      Ride?    @relation(fields: [ride_id], references: [id])
   user      User?    @relation(fields: [user_id], references: [id])
+}
+
+model Vehicle {
+  id             Int      @id @default(autoincrement())
+  captain_id     Int
+  vehicle_type   String   // car | auto | bike | suv | truck | van
+  make           String   // Toyota, Honda, Bajaj, etc.
+  model          String   // Camry, City, Pulsar, etc.
+  year           Int?     // 2020, 2021, etc.
+  color          String   // Red, Blue, White, etc.
+  plate_number   String   // License plate number
+  capacity       Int      @default(4) // Number of passengers
+  is_active      Boolean  @default(true)
+  created_at     DateTime @default(now())
+  updated_at     DateTime @default(now()) @updatedAt
+
+  // Relations
+  captain Captain @relation(fields: [captain_id], references: [id])
+  current_captains Captain[] @relation("CurrentVehicle")
+  rides Ride[]
 }
 
 model Wallet {

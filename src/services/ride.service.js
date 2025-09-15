@@ -1,5 +1,5 @@
 import { prisma } from "../config/prisma.js";
-import { findNearbyCaptains } from "./geospatial.service.js";
+import { findNearbyCaptains, getDistanceToCaptain } from "./geospatial.service.js";
 
 export async function createRide(data) {
   // Check customer exists
@@ -16,6 +16,7 @@ export async function createRide(data) {
     pickup_lng: Number(data.pickup_lng),
     drop_lat: Number(data.drop_lat),
     drop_lng: Number(data.drop_lng),
+    requested_vehicle_type: data.requested_vehicle_type || "car",
     status: "pending",
     fare: 0,
     customer: { connect: { id: Number(data.customer_id) } },
@@ -38,6 +39,16 @@ export async function createRide(data) {
 
 
 export async function autoAssignCaptain(rideId, pickupLat, pickupLng) {
+  // Get ride details to check requested vehicle type
+  const ride = await prisma.ride.findUnique({
+    where: { id: rideId },
+    select: { requested_vehicle_type: true }
+  });
+
+  if (!ride) {
+    throw new Error("Ride not found");
+  }
+
   // Find nearby available captains
   const nearbycaptain_ids = await findNearbyCaptains(
     Number(pickupLng), 
@@ -50,27 +61,50 @@ export async function autoAssignCaptain(rideId, pickupLat, pickupLng) {
     throw new Error("No available captains nearby");
   }
 
-  // Get captain details and find the best one
-  const captains = await prisma.Captain.findMany({
+  // Get captain details with their current vehicle and find the best match
+  const captains = await prisma.captain.findMany({
     where: { 
       id: { in: nearbycaptain_ids },
-      current_status: "available"
+      current_status: "available",
+      current_vehicle_id: { not: null } // Only captains with active vehicles
     },
-    select: { id: true, name: true, vehicle_type: true }
+    select: { 
+      id: true, 
+      name: true, 
+      current_vehicle: {
+        select: {
+          id: true,
+          vehicle_type: true,
+          make: true,
+          model: true,
+          color: true,
+          plate_number: true,
+          capacity: true
+        }
+      }
+    }
   });
 
   if (captains.length === 0) {
-    throw new Error("No available captains found");
+    throw new Error("No available captains with vehicles found");
   }
 
-  // Assign the first available captain (closest one)
-  const selectedCaptain = captains[0];
-  return await assignCaptain(rideId, selectedCaptain.id);
+  // Find captain with matching vehicle type, or use the first available
+  let selectedCaptain = captains.find(captain => 
+    captain.current_vehicle?.vehicle_type === ride.requested_vehicle_type
+  );
+
+  // If no exact match, use the first available captain
+  if (!selectedCaptain) {
+    selectedCaptain = captains[0];
+  }
+
+  return await assignCaptain(rideId, selectedCaptain.id, selectedCaptain.current_vehicle?.id);
 }
 
-export async function assignCaptain(rideId, captain_id) {
+export async function assignCaptain(rideId, captain_id, vehicle_id = null) {
   // Check if captain exists and is available
-  console.log("Assigning captain to ride", rideId, captain_id);
+  console.log("Assigning captain to ride", rideId, captain_id, "with vehicle", vehicle_id);
   console.log("Captain ID type:", typeof captain_id);
   console.log("Captain ID value:", captain_id);
   
@@ -78,17 +112,29 @@ export async function assignCaptain(rideId, captain_id) {
     throw new Error("Captain ID is required");
   }
   
-  const captain = await prisma.Captain.findUnique({
-    where: { id: Number(captain_id) }
+  const captain = await prisma.captain.findUnique({
+    where: { id: Number(captain_id) },
+    include: {
+      current_vehicle: {
+        select: {
+          id: true,
+          vehicle_type: true,
+          make: true,
+          model: true,
+          color: true,
+          plate_number: true,
+          capacity: true
+        }
+      }
+    }
   });
 
   if (!captain) {
     throw new Error("Captain not found");
+    console.log("Captain not found");
   }
 
-  if (captain.current_status !== "available") {
-    throw new Error("Captain is not available");
-  }
+  
 
   // Update ride with captain assignment
   /*const updatedRide = await prisma.Ride.update({ 
@@ -103,19 +149,48 @@ export async function assignCaptain(rideId, captain_id) {
     }
   });
 */
-const updatedRide = await prisma.Ride.update({ 
+const updatedRide = await prisma.ride.update({ 
   where: { id: rideId }, 
   data: { 
-    captain_id: captain_id, // Correct field
+    captain_id: captain_id,
+    vehicle_id: vehicle_id || captain.current_vehicle?.id, // Set the vehicle ID
     status: "accepted"
   },
   include: {
     customer: { select: { id: true, name: true, phone_number: true } },
-    captain: { select: { id: true, name: true, phone_number: true, vehicle_type: true, vehicle_number: true } }
+    captain: { 
+      select: { 
+        id: true, 
+        name: true, 
+        phone_number: true,
+        current_vehicle: {
+          select: {
+            id: true,
+            vehicle_type: true,
+            make: true,
+            model: true,
+            color: true,
+            plate_number: true,
+            capacity: true
+          }
+        }
+      } 
+    },
+    vehicle: {
+      select: {
+        id: true,
+        vehicle_type: true,
+        make: true,
+        model: true,
+        color: true,
+        plate_number: true,
+        capacity: true
+      }
+    }
   }
 });
   // Update captain status to on_ride
-  await prisma.Captain.update({
+  await prisma.captain.update({
     where: { id: captain_id },
     data: { current_status: "on_ride" }
   });
@@ -154,31 +229,59 @@ console.log("Updated ride", updatedRide);
 }
 
 export async function findAvailableCaptains(pickupLat, pickupLng, radius = 5000, count = 10) {
-  const nearbycaptain_ids = await findNearbyCaptains(
-    Number(pickupLng), 
-    Number(pickupLat), 
-    radius,
-    count
-  );
+  try {
+    // Use Redis GEO to find nearby available captains
+    const nearbycaptain_ids = await findNearbyCaptains(
+      Number(pickupLng), 
+      Number(pickupLat), 
+      radius,
+      count
+    );
 
-  if (nearbycaptain_ids.length === 0) {
+    if (nearbycaptain_ids.length === 0) {
+      console.log(`No available captains found within ${radius}m of ${pickupLat}, ${pickupLng}`);
+      return [];
+    }
+
+    // Get captain details from database
+    const captains = await prisma.Captain.findMany({
+      where: { 
+        id: { in: nearbycaptain_ids },
+        current_status: "available"
+      },
+      select: { 
+        id: true, 
+        name: true, 
+        phone_number: true,
+        vehicle_type: true, 
+        vehicle_number: true,
+        current_status: true
+      }
+    });
+
+    // Add distance information for each captain
+    const captainsWithDistance = await Promise.all(
+      captains.map(async (captain) => {
+        const distance = await getDistanceToCaptain(captain.id, pickupLng, pickupLat);
+        return {
+          ...captain,
+          distance: distance ? Math.round(distance) : null
+        };
+      })
+    );
+
+    // Sort by distance
+    captainsWithDistance.sort((a, b) => {
+      if (a.distance === null) return 1;
+      if (b.distance === null) return -1;
+      return a.distance - b.distance;
+    });
+
+    console.log(`Found ${captainsWithDistance.length} available captains within ${radius}m`);
+    return captainsWithDistance;
+    
+  } catch (error) {
+    console.error("Error finding available captains:", error);
     return [];
   }
-
-  const captains = await prisma.Captain.findMany({
-    where: { 
-      id: { in: nearbycaptain_ids },
-      current_status: "available"
-    },
-    select: { 
-      id: true, 
-      name: true, 
-      phone_number: true,
-      vehicle_type: true, 
-      vehicle_number: true,
-      current_status: true
-    }
-  });
-
-  return captains;
 }

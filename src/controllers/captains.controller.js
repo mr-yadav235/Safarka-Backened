@@ -2,7 +2,7 @@ import { prisma } from "../config/prisma.js";
 import { captainRegisterSchema, loginSchema } from "../utils/validation.js";
 import { badRequest, notFound, ok, unauthorized, created } from "../utils/responses.js";
 import { registerCaptain as registerCaptainService, loginCaptain } from "../services/auth.service.js";
-import { findNearbyCaptains, setCaptainAvailability, updateCaptainGeo } from "../services/geospatial.service.js";
+import { findNearbyCaptains, setCaptainAvailability, updateCaptainGeo, getAllAvailableCaptains } from "../services/geospatial.service.js";
 
 export async function registerCaptain(req, res) {
   const { error, value } = captainRegisterSchema.validate(req.body);
@@ -30,17 +30,64 @@ export async function nearby(req, res) {
 }
 
 export async function heartbeat(req, res) {
-  const id = Number(req.params.id);
-  const { lat, lng } = req.body;
-  await updateCaptainGeo(id, Number(lng), Number(lat));
-  return ok(res, { captain_id: id, lat: Number(lat), lng: Number(lng) });
+  try {
+    const id = Number(req.params.id);
+    const { lat, lng, speed, heading, accuracy } = req.body;
+    
+    // Validate coordinates
+    if (!lat || !lng) {
+      return badRequest(res, "Latitude and longitude are required");
+    }
+    
+    // Prepare additional data
+    const additionalData = {};
+    if (speed !== undefined) additionalData.speed = Number(speed);
+    if (heading !== undefined) additionalData.heading = Number(heading);
+    if (accuracy !== undefined) additionalData.accuracy = Number(accuracy);
+    
+    // Update captain location
+    await updateCaptainGeo(id, Number(lng), Number(lat), additionalData);
+    
+    return ok(res, { 
+      captain_id: id, 
+      lat: Number(lat), 
+      lng: Number(lng),
+      timestamp: Date.now(),
+      ...additionalData
+    });
+  } catch (error) {
+    console.error("Error updating captain location:", error);
+    return badRequest(res, error.message);
+  }
 }
 
 export async function goOnline(req, res) {
-  const id = req.user.userId;
-  const cap = await prisma.Captain.update({ where: { id: id }, data: { current_status: "available" } });
-  await setCaptainAvailability(id, true);
-  return ok(res, cap);
+  try {
+    const id = req.user.userId;
+    const { lat, lng } = req.body;
+    
+    // Update captain status in database
+    const cap = await prisma.Captain.update({ 
+      where: { id: id }, 
+      data: { current_status: "available" } 
+    });
+    
+    // Set availability in Redis with location if provided
+    if (lat && lng) {
+      await setCaptainAvailability(id, true, Number(lng), Number(lat));
+    } else {
+      await setCaptainAvailability(id, true);
+    }
+    
+    return ok(res, { 
+      ...cap, 
+      message: "Captain is now online and available for rides",
+      location: lat && lng ? { lat: Number(lat), lng: Number(lng) } : null
+    });
+  } catch (error) {
+    console.error("Error going online:", error);
+    return badRequest(res, error.message);
+  }
 }
 
 export async function goOffline(req, res) {
@@ -96,4 +143,49 @@ export async function myEarnings(req, res) {
     _count: { _all: true }
   });
   return ok(res, { completedTrips: agg._count._all, totalFare: agg._sum.fare ?? 0 });
+}
+
+export async function getAllAvailable(req, res) {
+  try {
+    const availableCaptains = await getAllAvailableCaptains();
+    
+    // Get additional captain details from database
+    const captainIds = availableCaptains.map(c => c.captain_id);
+    const captainDetails = await prisma.Captain.findMany({
+      where: { id: { in: captainIds } },
+      select: { 
+        id: true, 
+        name: true, 
+        phone_number: true,
+        vehicle_type: true, 
+        vehicle_number: true,
+        current_status: true
+      }
+    });
+    
+    // Merge location data with captain details
+    const captainsWithDetails = availableCaptains.map(locationData => {
+      const details = captainDetails.find(c => c.id === locationData.captain_id);
+      return {
+        ...details,
+        location: {
+          lat: locationData.lat,
+          lng: locationData.lng,
+          timestamp: locationData.timestamp,
+          speed: locationData.speed,
+          heading: locationData.heading,
+          accuracy: locationData.accuracy
+        }
+      };
+    });
+    
+    return ok(res, { 
+      captains: captainsWithDetails,
+      count: captainsWithDetails.length,
+      timestamp: Date.now()
+    });
+  } catch (error) {
+    console.error("Error getting all available captains:", error);
+    return badRequest(res, error.message);
+  }
 }

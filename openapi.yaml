@@ -1,79 +1,1663 @@
 openapi: 3.0.3
 info:
-  title: Rapido-like API
-  version: 1.0.0
+  title: SafarKa API
+  description: Location-based ride sharing API with real-time captain search and WebSocket support
+  version: 2.0.0
+  contact:
+    name: SafarKa API Support
+    email: support@safarka.com
 servers:
   - url: http://localhost:3000
+    description: Development server
+  - url: https://api.safarka.com
+    description: Production server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "John Doe"
+        phone_number:
+          type: string
+          example: "+919876543210"
+        email:
+          type: string
+          example: "john@example.com"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Captain:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "Captain Raj"
+        phone_number:
+          type: string
+          example: "+919876543210"
+        email:
+          type: string
+          example: "raj@example.com"
+        vehicle_type:
+          type: string
+          enum: [sedan, suv, hatchback, bike]
+          example: "sedan"
+        vehicle_number:
+          type: string
+          example: "MH01AB1234"
+        license_number:
+          type: string
+          example: "DL123456789"
+        current_status:
+          type: string
+          enum: [available, on_ride, offline]
+          example: "available"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CaptainWithLocation:
+      allOf:
+        - $ref: '#/components/schemas/Captain'
+        - type: object
+          properties:
+            distance:
+              type: number
+              description: Distance in meters
+              example: 250
+            location:
+              type: object
+              properties:
+                lat:
+                  type: number
+                  example: 19.0760
+                lng:
+                  type: number
+                  example: 72.8777
+                timestamp:
+                  type: integer
+                  example: 1699123456789
+                speed:
+                  type: number
+                  example: 25.5
+                heading:
+                  type: number
+                  example: 180
+                accuracy:
+                  type: number
+                  example: 5.0
+
+    Ride:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        pickup:
+          type: string
+          example: "Mumbai Airport"
+        dropoff:
+          type: string
+          example: "Bandra Kurla Complex"
+        status:
+          type: string
+          enum: [requested, accepted, ongoing, completed, cancelled]
+          example: "requested"
+        fare:
+          type: number
+          example: 150.50
+        pickup_lat:
+          type: number
+          example: 19.0760
+        pickup_lng:
+          type: number
+          example: 72.8777
+        drop_lat:
+          type: number
+          example: 19.0600
+        drop_lng:
+          type: number
+          example: 72.8400
+        customer_id:
+          type: integer
+          example: 1
+        captain_id:
+          type: integer
+          example: 1
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: string
+          format: date-time
+        customer:
+          $ref: '#/components/schemas/User'
+        captain:
+          $ref: '#/components/schemas/Captain'
+
+    CaptainLocation:
+      type: object
+      properties:
+        rideId:
+          type: integer
+          example: 1
+        captainId:
+          type: integer
+          example: 1
+        live:
+          type: object
+          properties:
+            lat:
+              type: number
+              example: 19.0760
+            lng:
+              type: number
+              example: 72.8777
+            timestamp:
+              type: integer
+              example: 1699123456789
+
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: "Error message"
+        error:
+          type: string
+          example: "VALIDATION_ERROR"
+
+    Success:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+        message:
+          type: string
+          example: "Operation successful"
+
+  parameters:
+    Authorization:
+      name: Authorization
+      in: header
+      required: true
+      schema:
+        type: string
+        example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    RideId:
+      name: rideId
+      in: path
+      required: true
+      schema:
+        type: integer
+        example: 1
+    CaptainId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        example: 1
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: integer
+        example: 1
 paths:
   /auth/register:
     post:
-      summary: Register user
+      summary: Register new user
+      description: Register a new user (customer, captain, or admin)
+      tags: [Authentication]
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
+              required: [name, phone_number, email, password, role]
               properties:
-                name: { type: string }
-                phone_number: { type: string }
-                email: { type: string }
-                password: { type: string }
-                role: { type: string, enum: [customer,captain,admin] }
+                name:
+                  type: string
+                  example: "John Doe"
+                phone_number:
+                  type: string
+                  example: "+919876543210"
+                email:
+                  type: string
+                  format: email
+                  example: "john@example.com"
+                password:
+                  type: string
+                  minLength: 6
+                  example: "password123"
+                role:
+                  type: string
+                  enum: [customer, captain, admin]
+                  example: "customer"
       responses:
-        '201': { description: Created }
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/User'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /auth/login:
     post:
-      summary: Login
+      summary: User login
+      description: Authenticate user and return JWT token
+      tags: [Authentication]
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
+              required: [phone_number, password]
               properties:
-                phone_number: { type: string }
-                password: { type: string }
+                phone_number:
+                  type: string
+                  example: "+919876543210"
+                password:
+                  type: string
+                  example: "password123"
       responses:
-        '200': { description: OK }
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          user:
+                            $ref: '#/components/schemas/User'
+                          token:
+                            type: string
+                            example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/validate:
+    get:
+      summary: Validate JWT token
+      description: Validate JWT token from Authorization header and return user information
+      tags: [Authentication]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Authorization
+          in: header
+        required: true
+          description: Bearer token for authentication
+          schema:
+            type: string
+            example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      responses:
+        '200':
+          description: Token is valid
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          message:
+                            type: string
+                            example: "Token is valid"
+                          user:
+                            oneOf:
+                              - $ref: '#/components/schemas/User'
+                              - $ref: '#/components/schemas/Captain'
+                              - type: object
+                                properties:
+                                  id:
+                                    type: integer
+                                    example: 1
+                                  role:
+                                    type: string
+                                    example: "admin"
+        '401':
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /captains/register:
     post:
-      summary: Register captain details
+      summary: Register captain
+      description: Register a new captain with vehicle details
+      tags: [Captains]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, phone_number, email, password, vehicle_type, vehicle_number, license_number]
+              properties:
+                name:
+                  type: string
+                  example: "Captain Raj"
+                phone_number:
+                  type: string
+                  example: "+919876543210"
+                email:
+                  type: string
+                  format: email
+                  example: "raj@example.com"
+                password:
+                  type: string
+                  minLength: 6
+                  example: "password123"
+                vehicle_type:
+                  type: string
+                  enum: [sedan, suv, hatchback, bike]
+                  example: "sedan"
+                vehicle_number:
+                  type: string
+                  example: "MH01AB1234"
+                license_number:
+                  type: string
+                  example: "DL123456789"
       responses:
-        '200': { description: OK }
+        '201':
+          description: Captain registered successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Captain'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /captains/login:
+    post:
+      summary: Captain login
+      description: Authenticate captain and return JWT token
+      tags: [Captains]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone_number, password]
+              properties:
+                phone_number:
+                  type: string
+                  example: "+919876543210"
+                password:
+                  type: string
+                  example: "password123"
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          captain:
+                            $ref: '#/components/schemas/Captain'
+                          token:
+                            type: string
+                            example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /captains/{id}/status:
     patch:
       summary: Update captain status
+      description: Update captain availability status
+      tags: [Captains]
+      security:
+        - bearerAuth: []
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: integer }
+        - $ref: '#/components/parameters/CaptainId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [available, on_ride, offline]
+                  example: "available"
       responses:
-        '200': { description: OK }
+        '200':
+          description: Status updated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Captain'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /captains/nearby:
     get:
       summary: Find nearby captains
+      description: Find available captains within specified radius using Redis GEO
+      tags: [Captains]
       parameters:
         - in: query
           name: lat
-          schema: { type: number }
+        required: true
+          schema:
+            type: number
+            example: 19.0760
+          description: Latitude
         - in: query
           name: lng
-          schema: { type: number }
+        required: true
+          schema:
+            type: number
+            example: 72.8777
+          description: Longitude
         - in: query
           name: radius
-          schema: { type: integer }
+          schema:
+            type: integer
+            default: 3000
+            example: 3000
+          description: Search radius in meters
+        - in: query
+          name: count
+          schema:
+            type: integer
+            default: 10
+            example: 10
+          description: Maximum number of captains to return
       responses:
-        '200': { description: OK }
+        '200':
+          description: List of nearby captains
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Captain'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /captains/available:
+    get:
+      summary: Get all available captains with locations
+      description: Get all available captains with their real-time locations
+      tags: [Captains]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of available captains with locations
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          captains:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/CaptainWithLocation'
+                          count:
+                            type: integer
+                            example: 5
+                          timestamp:
+                            type: integer
+                            example: 1699123456789
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /captains/{id}/heartbeat:
     post:
-      summary: Captain geo heartbeat
+      summary: Update captain location
+      description: Update captain's real-time location and status
+      tags: [Captains]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CaptainId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lat, lng]
+              properties:
+                lat:
+                  type: number
+                  example: 19.0760
+                  description: Latitude
+                lng:
+                  type: number
+                  example: 72.8777
+                  description: Longitude
+                speed:
+                  type: number
+                  example: 25.5
+                  description: Speed in km/h
+                heading:
+                  type: number
+                  example: 180
+                  description: Heading in degrees
+                accuracy:
+                  type: number
+                  example: 5.0
+                  description: Location accuracy in meters
+      responses:
+        '200':
+          description: Location updated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          captain_id:
+                            type: integer
+                            example: 1
+                          lat:
+                            type: number
+                            example: 19.0760
+                          lng:
+                            type: number
+                            example: 72.8777
+                          timestamp:
+                            type: integer
+                            example: 1699123456789
+                          speed:
+                            type: number
+                            example: 25.5
+                          heading:
+                            type: number
+                            example: 180
+                          accuracy:
+                            type: number
+                            example: 5.0
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /captains/me/online:
+    post:
+      summary: Captain go online
+      description: Set captain status to available and optionally set location
+      tags: [Captains]
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                lat:
+                  type: number
+                  example: 19.0760
+                  description: Optional latitude for initial location
+                lng:
+                  type: number
+                  example: 72.8777
+                  description: Optional longitude for initial location
+      responses:
+        '200':
+          description: Captain is now online
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/Captain'
+                          - type: object
+                            properties:
+                              message:
+                                type: string
+                                example: "Captain is now online and available for rides"
+                              location:
+                                type: object
+                                properties:
+                                  lat:
+                                    type: number
+                                    example: 19.0760
+                                  lng:
+                                    type: number
+                                    example: 72.8777
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /captains/me/offline:
+    post:
+      summary: Captain go offline
+      description: Set captain status to offline
+      tags: [Captains]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Captain is now offline
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Captain'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /rides/request:
+    post:
+      summary: Request a ride
+      description: Create a new ride request with pickup and dropoff locations
+      tags: [Rides]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [customer_id, pickup, dropoff, pickup_lat, pickup_lng, drop_lat, drop_lng]
+              properties:
+                customer_id:
+                  type: integer
+                  example: 1
+                  description: Customer ID
+                pickup:
+                  type: string
+                  example: "Mumbai Airport Terminal 2"
+                  description: Pickup location address
+                dropoff:
+                  type: string
+                  example: "Bandra Kurla Complex"
+                  description: Dropoff location address
+                pickup_lat:
+                  type: number
+                  example: 19.0760
+                  description: Pickup latitude
+                pickup_lng:
+                  type: number
+                  example: 72.8777
+                  description: Pickup longitude
+                drop_lat:
+                  type: number
+                  example: 19.0600
+                  description: Dropoff latitude
+                drop_lng:
+                  type: number
+                  example: 72.8400
+                  description: Dropoff longitude
+      responses:
+        '200':
+          description: Ride requested successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Ride'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /rides/captains:
+    get:
+      summary: Find available captains for ride
+      description: Find available captains near pickup location with distance information
+      tags: [Rides]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: lat
+        required: true
+          schema:
+            type: number
+            example: 19.0760
+          description: Pickup latitude
+        - in: query
+          name: lng
+        required: true
+          schema:
+            type: number
+            example: 72.8777
+          description: Pickup longitude
+        - in: query
+          name: radius
+          schema:
+            type: integer
+            default: 5000
+            example: 5000
+          description: Search radius in meters
+        - in: query
+          name: count
+          schema:
+            type: integer
+            default: 10
+            example: 10
+          description: Maximum number of captains to return
+      responses:
+        '200':
+          description: List of available captains with distances
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          captains:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/CaptainWithLocation'
+                          count:
+                            type: integer
+                            example: 3
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /rides/pending:
+    get:
+      summary: Get pending rides
+      description: Get rides that are requested but not yet assigned to any captain
+      tags: [Rides]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of pending rides
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          rides:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Ride'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /rides/{rideId}/accept:
+    post:
+      summary: Accept a ride
+      description: Captain accepts a ride request
+      tags: [Rides]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+      responses:
+        '200':
+          description: Ride accepted successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Ride'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /rides/{rideId}/status:
+    patch:
+      summary: Update ride status
+      description: Update ride status (ongoing, completed, cancelled)
+      tags: [Rides]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [requested, accepted, ongoing, completed, cancelled]
+                  example: "ongoing"
+      responses:
+        '200':
+          description: Status updated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Ride'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /rides/{rideId}:
+    get:
+      summary: Get ride details
+      description: Get detailed information about a specific ride
+      tags: [Rides]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+      responses:
+        '200':
+          description: Ride details
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Ride'
+        '404':
+          description: Ride not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /rides/{rideId}/live:
+    get:
+      summary: Get captain live location
+      description: Get real-time captain location for an active ride
+      tags: [Rides]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+      responses:
+        '200':
+          description: Captain live location
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CaptainLocation'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /rides/{rideId}/location:
+    post:
+      summary: Update ride tracking location
+      description: Update ride tracking location (for captain during ride)
+      tags: [Rides]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [latitude, longitude]
+              properties:
+                latitude:
+                  type: number
+                  example: 19.0760
+                  description: Current latitude
+                longitude:
+                  type: number
+                  example: 72.8777
+                  description: Current longitude
+                speed:
+                  type: number
+                  example: 25.5
+                  description: Current speed in km/h
+      responses:
+        '200':
+          description: Location updated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          message:
+                            type: string
+                            example: "Location tracking updated"
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # WebSocket Endpoint Documentation
+  /ws:
+    get:
+      summary: WebSocket Connection
+      description: |
+        WebSocket endpoint for real-time communication.
+        
+        **Connection URL:** `ws://localhost:3000/ws` or `wss://api.safarka.com/ws`
+        
+        **Authentication:** Include JWT token in connection query parameter or Authorization header
+        
+        **Events:**
+        
+        **Client to Server Events:**
+        - `join_room` - Join a room for specific updates
+        - `leave_room` - Leave a room
+        - `subscribe_location_updates` - Subscribe to location updates for an area
+        - `unsubscribe_location_updates` - Unsubscribe from location updates
+        
+        **Server to Client Events:**
+        - `ride:requested` - New ride request
+        - `ride:accepted` - Ride accepted by captain
+        - `ride:started` - Ride started
+        - `ride:completed` - Ride completed
+        - `ride:cancelled` - Ride cancelled
+        - `captain:location_update` - Captain location update
+        - `captain:status_change` - Captain status change
+        - `captain:available` - Captain comes online
+        - `captain:unavailable` - Captain goes offline
+        
+        **Example Connection:**
+        ```javascript
+        const socket = io('ws://localhost:3000/ws', {
+          auth: {
+            token: 'your-jwt-token'
+          }
+        });
+        
+        // Join ride room
+        socket.emit('join_room', 'ride:123');
+        
+        // Listen for ride updates
+        socket.on('ride:accepted', (data) => {
+          console.log('Ride accepted:', data);
+        });
+        ```
+      tags: [WebSocket]
+      parameters:
+        - in: query
+          name: token
+          schema:
+            type: string
+          description: JWT authentication token
+      responses:
+        '101':
+          description: WebSocket connection established
+        '401':
+          description: Unauthorized - Invalid or missing token
+
+  /payments/initiate:
+    post:
+      summary: Initiate payment
+      description: Initiate payment for a ride
+      tags: [Payments]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ride_id, amount, method]
+              properties:
+                ride_id:
+                  type: integer
+                  example: 1
+                amount:
+                  type: number
+                  example: 150.50
+                method:
+                  type: string
+                  enum: [wallet, card, upi, cash]
+                  example: "wallet"
+      responses:
+        '200':
+          description: Payment initiated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          payment_id:
+                            type: string
+                            example: "pay_123456789"
+                          status:
+                            type: string
+                            example: "initiated"
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /payments/confirm:
+    post:
+      summary: Confirm payment
+      description: Confirm payment transaction
+      tags: [Payments]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [payment_id, transaction_id]
+              properties:
+                payment_id:
+                  type: string
+                  example: "pay_123456789"
+                transaction_id:
+                  type: string
+                  example: "txn_987654321"
+      responses:
+        '200':
+          description: Payment confirmed successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          payment_id:
+                            type: string
+                            example: "pay_123456789"
+                          status:
+                            type: string
+                            example: "completed"
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /wallet/{userId}:
+    get:
+      summary: Get wallet balance
+      description: Get user's wallet balance and transaction history
+      tags: [Wallet]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Wallet information
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          balance:
+                            type: number
+                            example: 500.00
+                          transactions:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                id:
+                                  type: integer
+                                amount:
+                                  type: number
+                                type:
+                                  type: string
+                                  enum: [credit, debit]
+                                description:
+                                  type: string
+                                created_at:
+                                  type: string
+                                  format: date-time
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /wallet/{userId}/topup:
+    post:
+      summary: Top up wallet
+      description: Add money to user's wallet
+      tags: [Wallet]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount, method]
+              properties:
+                amount:
+                  type: number
+                  example: 100.00
+                method:
+                  type: string
+                  enum: [card, upi, netbanking]
+                  example: "card"
+      responses:
+        '200':
+          description: Wallet topped up successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          new_balance:
+                            type: number
+                            example: 600.00
+                          transaction_id:
+                            type: string
+                            example: "txn_123456789"
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /promotions:
+    get:
+      summary: List available promotions
+      description: Get list of available promotional offers
+      tags: [Promotions]
+      responses:
+        '200':
+          description: List of promotions
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: integer
+                            code:
+                              type: string
+                              example: "SAVE20"
+                            description:
+                              type: string
+                              example: "20% off on your first ride"
+                            discount_type:
+                              type: string
+                              enum: [percentage, fixed]
+                            discount_value:
+                              type: number
+                            valid_until:
+                              type: string
+                              format: date-time
+
+  /promotions/apply:
+    post:
+      summary: Apply promotion code
+      description: Apply a promotion code to a ride
+      tags: [Promotions]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ride_id, promo_code]
+              properties:
+                ride_id:
+                  type: integer
+                  example: 1
+                promo_code:
+                  type: string
+                  example: "SAVE20"
+      responses:
+        '200':
+          description: Promotion applied successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          original_fare:
+                            type: number
+                            example: 150.00
+                          discount:
+                            type: number
+                            example: 30.00
+                          final_fare:
+                            type: number
+                            example: 120.00
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /ratings/rides/{rideId}:
+    post:
+      summary: Rate a ride
+      description: Submit rating and feedback for a completed ride
+      tags: [Ratings]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rating, user_id]
+              properties:
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                  example: 5
+                user_id:
+                  type: integer
+                  example: 1
+                feedback:
+                  type: string
+                  example: "Great ride, very professional driver"
+      responses:
+        '200':
+          description: Rating submitted successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          rating_id:
+                            type: integer
+                            example: 1
+                          rating:
+                            type: integer
+                            example: 5
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /ratings/users/{id}:
+    get:
+      summary: Get user ratings
+      description: Get ratings received by a user (customer or captain)
+      tags: [Ratings]
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: User ratings
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          average_rating:
+                            type: number
+                            example: 4.5
+                          total_ratings:
+                            type: integer
+                            example: 25
+                          ratings:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                rating:
+                                  type: integer
+                                feedback:
+                                  type: string
+                                created_at:
+                                  type: string
+                                  format: date-time
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /support:
+    post:
+      summary: Create support ticket
+      description: Create a new support ticket
+      tags: [Support]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, subject, message]
+              properties:
+                user_id:
+                  type: integer
+                  example: 1
+                subject:
+                  type: string
+                  example: "Payment issue"
+                message:
+                  type: string
+                  example: "I was charged twice for my ride"
+                ride_id:
+                  type: integer
+                  example: 1
+      responses:
+        '200':
+          description: Support ticket created successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          ticket_id:
+                            type: integer
+                            example: 1
+                          status:
+                            type: string
+                            example: "open"
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /support/{ticketId}:
+    patch:
+      summary: Update support ticket
+      description: Update support ticket status or add response
+      tags: [Support]
+      security:
+        - bearerAuth: []
       parameters:
         - in: path
-          name: id
-          required: true
-          schema: { type: integer }
+          name: ticketId
+        required: true
+          schema:
+            type: integer
+            example: 1
       requestBody:
         required: true
         content:
@@ -81,137 +1665,35 @@ paths:
             schema:
               type: object
               properties:
-                lat: { type: number }
-                lng: { type: number }
+                status:
+                  type: string
+                  enum: [open, in_progress, resolved, closed]
+                  example: "resolved"
+                response:
+                  type: string
+                  example: "Issue has been resolved. Refund processed."
       responses:
-        '200': { description: OK }
-  /rides/request:
-    post:
-      summary: Request a ride
-      responses:
-        '200': { description: OK }
-  /rides/{rideId}/accept:
-    post:
-      summary: Accept a ride
-      parameters:
-        - in: path
-          name: rideId
-          required: true
-          schema: { type: integer }
-      responses:
-        '200': { description: OK }
-  /rides/{rideId}/status:
-    patch:
-      summary: Update ride status
-      parameters:
-        - in: path
-          name: rideId
-          required: true
-          schema: { type: integer }
-      responses:
-        '200': { description: OK }
-  /rides/{rideId}:
-    get:
-      summary: Ride details
-      parameters:
-        - in: path
-          name: rideId
-          required: true
-          schema: { type: integer }
-      responses:
-        '200': { description: OK }
-  /rides/{rideId}/live:
-    get:
-      summary: Live captain location
-      parameters:
-        - in: path
-          name: rideId
-          required: true
-          schema: { type: integer }
-      responses:
-        '200': { description: OK }
-  /rides/{rideId}/location:
-    post:
-      summary: Push ride tracking point
-      parameters:
-        - in: path
-          name: rideId
-          required: true
-          schema: { type: integer }
-      responses:
-        '200': { description: OK }
-  /payments/initiate:
-    post:
-      summary: Initiate payment
-      responses:
-        '200': { description: OK }
-  /payments/confirm:
-    post:
-      summary: Confirm payment
-      responses:
-        '200': { description: OK }
-  /wallet/{userId}:
-    get:
-      summary: Get wallet
-      parameters:
-        - in: path
-          name: userId
-          required: true
-          schema: { type: integer }
-      responses:
-        '200': { description: OK }
-  /wallet/{userId}/topup:
-    post:
-      summary: Top up wallet
-      parameters:
-        - in: path
-          name: userId
-          required: true
-          schema: { type: integer }
-      responses:
-        '200': { description: OK }
-  /promotions:
-    get:
-      summary: List promos
-      responses:
-        '200': { description: OK }
-  /promotions/apply:
-    post:
-      summary: Apply promo to fare
-      responses:
-        '200': { description: OK }
-  /ratings/rides/{rideId}:
-    post:
-      summary: Give rating for a ride
-      parameters:
-        - in: path
-          name: rideId
-          required: true
-          schema: { type: integer }
-      responses:
-        '200': { description: OK }
-  /ratings/users/{id}:
-    get:
-      summary: Get ratings received by user
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: integer }
-      responses:
-        '200': { description: OK }
-  /support:
-    post:
-      summary: Create support ticket
-      responses:
-        '200': { description: OK }
-  /support/{ticketId}:
-    patch:
-      summary: Update support ticket status
-      parameters:
-        - in: path
-          name: ticketId
-          required: true
-          schema: { type: integer }
-      responses:
-        '200': { description: OK }
+        '200':
+          description: Support ticket updated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          ticket_id:
+                            type: integer
+                            example: 1
+                          status:
+                            type: string
+                            example: "resolved"
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
